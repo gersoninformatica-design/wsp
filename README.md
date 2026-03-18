@@ -23,7 +23,10 @@ Clonas este repo, corres un comando, y **Claude Code te guia paso a paso** para 
 - **Python 3.11+** — [python.org/downloads](https://python.org/downloads)
 - **Claude Code** — `npm install -g @anthropic-ai/claude-code`
 - **API Key de Anthropic** — [platform.anthropic.com](https://platform.anthropic.com/settings/api-keys)
-- **Cuenta Whapi.cloud** — [whapi.cloud](https://whapi.cloud) (plan gratis disponible)
+- **Cuenta de WhatsApp API** — elige una:
+  - [Whapi.cloud](https://whapi.cloud) (recomendado, plan gratis)
+  - [Meta Cloud API](https://developers.facebook.com) (oficial, gratis por conversacion)
+  - [Twilio](https://twilio.com) (robusto, buena documentacion)
 
 ---
 
@@ -53,10 +56,11 @@ Cuando ejecutas `/build-agent`, Claude Code genera:
 ```
 agentkit/
 ├── agent/
-│   ├── main.py            ← Servidor FastAPI + webhook WhatsApp
+│   ├── main.py            ← Servidor FastAPI + webhook (provider-agnostic)
 │   ├── brain.py           ← Conexion con Claude AI
 │   ├── memory.py          ← Historial de conversaciones por cliente
-│   └── tools.py           ← Herramientas especificas de tu negocio
+│   ├── tools.py           ← Herramientas especificas de tu negocio
+│   └── providers/         ← Adaptador de WhatsApp (Whapi/Meta/Twilio)
 ├── config/
 │   ├── business.yaml      ← Datos de tu negocio
 │   └── prompts.yaml       ← System prompt personalizado
@@ -115,7 +119,7 @@ docker compose up --build
 |-----------|-----------|
 | IA | Claude AI (claude-sonnet-4-6) |
 | Servidor | FastAPI + Uvicorn |
-| WhatsApp | Whapi.cloud |
+| WhatsApp | Whapi.cloud / Meta Cloud API / Twilio |
 | Base de datos | SQLite (local) / PostgreSQL (prod) |
 | Deploy | Docker + Railway |
 
