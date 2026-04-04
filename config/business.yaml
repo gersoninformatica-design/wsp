@@ -1,0 +1,43 @@
+# Configuracion de Elara — Generado por AgentKit
+persona:
+  nombre_jefe: "Gerson"
+  titulo: "Funcionario TI, Juzgado de Familia"
+  zona_horaria: "America/Santiago"
+
+agente:
+  nombre: "Elara"
+  rol: "Secretaria personal del Sr. Gerson"
+  tono: "Profesional pero calida"
+
+horarios:
+  laboral:
+    inicio: "08:00"
+    fin: "16:15"
+    dias: [1, 2, 3, 4, 5]  # lunes a viernes
+  personal_corte: "17:00"
+  naxito_corte: "16:15"
+  respuesta_nocturna: "22:00"
+
+categorias:
+  laboral:
+    descripcion: "Asuntos del Juzgado de Familia"
+    en_horario: "El Sr. Gerson respondera a la brevedad segun la urgencia del asunto."
+    fuera_horario: "Fuera de horario laboral. Puede dejar su mensaje y sera contestado al dia siguiente habil segun urgencia."
+
+  naxito:
+    descripcion: "Asuntos relacionados con Naxito (profesoras, terapeutas, su mama)"
+    sub_opciones:
+      informacion:
+        en_horario: "Le contestare a la brevedad."
+        fuera_horario: "Le contestare despues de las 22:00 hrs cuando este disponible."
+      urgente:
+        respuesta: "Transfiriendo directamente al Sr. Gerson. Un momento por favor."
+
+  personal:
+    descripcion: "Temas personales"
+    antes_corte: "El Sr. Gerson le contestara durante el transcurso del dia."
+    despues_corte: "El Sr. Gerson tratara de contestarle posterior a las 22:00 hrs, cuando su hijo este descansando."
+
+metadata:
+  creado: "2026-04-04"
+  version: "1.0"
