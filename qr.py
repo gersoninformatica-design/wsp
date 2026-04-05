@@ -64,17 +64,18 @@ def main():
     if isinstance(qr_data, dict):
         qr_base64 = qr_data.get("base64") or qr_data.get("qrcode")
 
-    # Si no vino en creacion, hacer polling
+    # Polling agresivo: cada 0.5 segundos por 60 segundos
     if not qr_base64 or qr_base64 == "data:image/png;base64,":
-        print("   Esperando QR (puede tardar 5-10 seg)...")
-        for i in range(10):
-            time.sleep(3)
+        print("   Esperando QR (hasta 60 seg)...")
+        for i in range(120):
+            time.sleep(0.5)
             r2 = api("GET", "/instance/connect/elara")
             code = r2.get("base64") or r2.get("code") or ""
             if code and "base64," in str(code):
                 qr_base64 = code
                 break
-            print(f"   Intento {i+1}/10...")
+            if i % 10 == 0 and i > 0:
+                print(f"   {i//2} seg...")
 
     if not qr_base64:
         print("\n[ERROR] No se pudo obtener el QR.")
