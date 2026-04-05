@@ -16,20 +16,28 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
 
-  # Evolution API — Gateway de WhatsApp (open source)
+  # Evolution API v1 — Gateway de WhatsApp (open source, QR estable)
   evolution:
-    image: atendai/evolution-api:v2.2.3
+    image: atendai/evolution-api:1.8.7
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://evolution:${POSTGRES_PASSWORD:-evolution_secret}@postgres:5432/evolution
-      - CACHE_REDIS_ENABLED=true
-      - CACHE_REDIS_URI=redis://redis:6379
+      - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-elara-secret-key}
-    depends_on:
-      - postgres
-      - redis
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      - DATABASE_ENABLED=false
+      - REDIS_ENABLED=false
+      - STORE_MESSAGES=true
+      - STORE_MESSAGE_UP=true
+      - STORE_CONTACTS=true
+      - STORE_CHATS=true
+      - DEL_INSTANCE=false
+      - WEBHOOK_GLOBAL_ENABLED=false
+      - CONFIG_SESSION_PHONE_CLIENT=Elara
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - QRCODE_LIMIT=30
+    volumes:
+      - evolution_data:/evolution/instances
     restart: unless-stopped
 
   # Elara — Secretaria Virtual del Sr. Gerson
@@ -48,3 +56,4 @@ services:
 
 volumes:
   postgres_data:
+  evolution_data:
