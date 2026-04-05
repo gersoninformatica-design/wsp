@@ -43,7 +43,12 @@ def main():
     print("[2/3] Creando instancia y obteniendo QR...")
     result = api("POST", "/instance/create", {
         "instanceName": "elara",
-        "qrcode": True,
+        "integration": "WHATSAPP-BAILEYS",
+        "qrcode": True
+    })
+    # Configurar webhook por separado
+    time.sleep(2)
+    api("POST", "/webhook/set/elara", {
         "webhook": {
             "url": "http://wsp-elara-1:8000/webhook",
             "webhookByEvents": False,
