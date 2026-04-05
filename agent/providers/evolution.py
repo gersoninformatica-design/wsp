@@ -83,7 +83,7 @@ class ProveedorEvolution(ProveedorWhatsApp):
         numero = telefono if "@" in telefono else f"{telefono}@s.whatsapp.net"
         payload = {
             "number": numero,
-            "textMessage": {"text": mensaje},
+            "text": mensaje,
         }
 
         try:
