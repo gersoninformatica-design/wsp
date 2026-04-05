@@ -39,27 +39,37 @@ def main():
     api("DELETE", "/instance/delete/elara")
     time.sleep(2)
 
-    # Crear instancia nueva (v1)
+    # Crear instancia nueva (v2)
     print("[2/3] Creando instancia y obteniendo QR...")
     result = api("POST", "/instance/create", {
         "instanceName": "elara",
         "qrcode": True,
-        "webhook": "http://wsp-elara-1:8000/webhook",
-        "webhook_by_events": False,
-        "events": ["MESSAGES_UPSERT"]
+        "webhook": {
+            "url": "http://wsp-elara-1:8000/webhook",
+            "webhookByEvents": False,
+            "webhookBase64": False,
+            "enabled": True,
+            "events": ["MESSAGES_UPSERT"]
+        }
     })
 
-    # En v1, el QR viene directamente en connect
+    # Extraer QR del resultado de creacion
     qr_base64 = None
-    print("   Esperando QR (puede tardar 5-10 seg)...")
-    for i in range(10):
-        time.sleep(3)
-        r2 = api("GET", "/instance/connect/elara")
-        code = r2.get("base64") or r2.get("qrcode") or ""
-        if code and "base64," in str(code):
-            qr_base64 = code
-            break
-        print(f"   Intento {i+1}/10...")
+    qr_data = result.get("qrcode", {})
+    if isinstance(qr_data, dict):
+        qr_base64 = qr_data.get("base64") or qr_data.get("qrcode")
+
+    # Si no vino en creacion, hacer polling
+    if not qr_base64 or qr_base64 == "data:image/png;base64,":
+        print("   Esperando QR (puede tardar 5-10 seg)...")
+        for i in range(10):
+            time.sleep(3)
+            r2 = api("GET", "/instance/connect/elara")
+            code = r2.get("base64") or r2.get("code") or ""
+            if code and "base64," in str(code):
+                qr_base64 = code
+                break
+            print(f"   Intento {i+1}/10...")
 
     if not qr_base64:
         print("\n[ERROR] No se pudo obtener el QR.")
