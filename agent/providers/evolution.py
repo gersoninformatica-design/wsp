@@ -78,11 +78,11 @@ class ProveedorEvolution(ProveedorWhatsApp):
             "apikey": self.api_key,
             "Content-Type": "application/json",
         }
-        # Evolution API v2 requiere el numero con sufijo @s.whatsapp.net
+        # Evolution API v1 requiere textMessage y numero con @s.whatsapp.net
         numero = telefono if "@" in telefono else f"{telefono}@s.whatsapp.net"
         payload = {
             "number": numero,
-            "text": mensaje,
+            "textMessage": {"text": mensaje},
         }
 
         try:
