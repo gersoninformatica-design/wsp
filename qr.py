@@ -46,7 +46,7 @@ def main():
         "integration": "WHATSAPP-BAILEYS",
         "qrcode": True
     })
-    # Configurar webhook por separado
+    # Configurar webhook con QRCODE_UPDATED incluido
     time.sleep(2)
     api("POST", "/webhook/set/elara", {
         "webhook": {
@@ -54,7 +54,7 @@ def main():
             "webhookByEvents": False,
             "webhookBase64": False,
             "enabled": True,
-            "events": ["MESSAGES_UPSERT"]
+            "events": ["MESSAGES_UPSERT", "QRCODE_UPDATED"]
         }
     })
 
@@ -64,17 +64,23 @@ def main():
     if isinstance(qr_data, dict):
         qr_base64 = qr_data.get("base64") or qr_data.get("qrcode")
 
-    # Polling agresivo: cada 0.5 segundos por 60 segundos
+    # Polling desde Elara (que recibe el QR via webhook QRCODE_UPDATED)
     if not qr_base64 or qr_base64 == "data:image/png;base64,":
-        print("   Esperando QR (hasta 60 seg)...")
+        print("   Esperando QR via webhook (hasta 60 seg)...")
         for i in range(120):
             time.sleep(0.5)
-            r2 = api("GET", "/instance/connect/elara")
-            code = r2.get("base64") or r2.get("code") or ""
-            if code and "base64," in str(code):
-                qr_base64 = code
-                break
-            if i % 10 == 0 and i > 0:
+            try:
+                r2 = urllib.request.urlopen(
+                    urllib.request.Request("http://localhost:8000/qrcode"), timeout=3
+                )
+                data = json.loads(r2.read().decode())
+                code = data.get("base64", "")
+                if code and "base64," in str(code):
+                    qr_base64 = code
+                    break
+            except Exception:
+                pass
+            if i % 20 == 0 and i > 0:
                 print(f"   {i//2} seg...")
 
     if not qr_base64:

@@ -29,6 +29,21 @@ class ProveedorWhatsApp(ABC):
         """Extrae y normaliza mensajes del payload del webhook."""
         ...
 
+    async def parsear_webhook_body(self, body: dict) -> list[MensajeEntrante]:
+        """Alternativa que acepta el body ya parseado (evita doble lectura)."""
+        from fastapi import Request as _Request
+        import json
+        # Implementacion default: crear un Request falso con el body ya parseado
+        # Los proveedores pueden sobreescribir este metodo
+        class _FakeRequest:
+            async def json(self):
+                return body
+            async def body(self):
+                return json.dumps(body).encode()
+            async def form(self):
+                return body
+        return await self.parsear_webhook(_FakeRequest())
+
     @abstractmethod
     async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
         """Envia un mensaje de texto. Retorna True si fue exitoso."""

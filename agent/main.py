@@ -33,6 +33,9 @@ PORT = int(os.getenv("PORT", 8000))
 _mensajes_procesados: set[str] = set()
 _MAX_CACHE = 1000
 
+# Almacen temporal del QR (para el script qr.py)
+_ultimo_qr: dict = {}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,6 +60,12 @@ async def health_check():
     return {"status": "ok", "service": "elara"}
 
 
+@app.get("/qrcode")
+async def obtener_qr():
+    """Retorna el ultimo QR recibido via webhook (para script qr.py)."""
+    return _ultimo_qr
+
+
 @app.get("/webhook")
 async def webhook_verificacion(request: Request):
     """Verificacion GET del webhook (requerido por Meta, no-op para Evolution)."""
@@ -74,7 +83,27 @@ async def webhook_handler(request: Request):
     Detecta alertas urgentes de Naxito.
     """
     try:
-        mensajes = await proveedor.parsear_webhook(request)
+        import json as _json
+        import time as _time
+        body_bytes = await request.body()
+        body_json = {}
+        try:
+            body_json = _json.loads(body_bytes)
+        except Exception:
+            pass
+
+        # Capturar evento QRCODE_UPDATED antes de parsear mensajes
+        evento = body_json.get("event", "")
+        if evento in ("qrcode.updated", "QRCODE_UPDATED"):
+            qr_data = body_json.get("data", {})
+            qr_obj = qr_data.get("qrcode", {}) if isinstance(qr_data.get("qrcode"), dict) else {}
+            b64 = qr_obj.get("base64") or qr_data.get("base64", "")
+            _ultimo_qr["base64"] = b64
+            _ultimo_qr["timestamp"] = _time.time()
+            logger.info("QR recibido via webhook")
+            return {"status": "ok"}
+
+        mensajes = await proveedor.parsear_webhook_body(body_json)
 
         for msg in mensajes:
             if msg.es_propio or not msg.texto:
