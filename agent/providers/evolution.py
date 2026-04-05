@@ -1,9 +1,10 @@
-# agent/providers/evolution.py — Adaptador para Evolution API
+# agent/providers/evolution.py — Adaptador para Evolution API v1
 # Generado por AgentKit para Elara
 
 """
-Proveedor de WhatsApp usando Evolution API (open source, self-hosted).
+Proveedor de WhatsApp usando Evolution API v1 (open source, self-hosted).
 Se conecta via QR code a WhatsApp Web usando el protocolo Baileys.
+Soporta JIDs @s.whatsapp.net y @lid (numeros con privacidad).
 """
 
 import os
@@ -26,6 +27,13 @@ class ProveedorEvolution(ProveedorWhatsApp):
     async def parsear_webhook(self, request: Request) -> list[MensajeEntrante]:
         """Parsea el payload de Evolution API (evento MESSAGES_UPSERT)."""
         body = await request.json()
+        return self._parsear_body(body)
+
+    async def parsear_webhook_body(self, body: dict) -> list[MensajeEntrante]:
+        """Parsea el body ya deserializado."""
+        return self._parsear_body(body)
+
+    def _parsear_body(self, body: dict) -> list[MensajeEntrante]:
         mensajes = []
 
         evento = body.get("event")
@@ -36,24 +44,21 @@ class ProveedorEvolution(ProveedorWhatsApp):
         key = data.get("key", {})
         message = data.get("message", {})
 
-        # Obtener el JID del remitente
         remote_jid = key.get("remoteJid", "")
 
-        # Ignorar mensajes de grupos
+        # Ignorar grupos
         if "@g.us" in remote_jid:
             return mensajes
 
-        # Limpiar numero: quitar @s.whatsapp.net
-        telefono = remote_jid.replace("@s.whatsapp.net", "")
+        # Mantener el JID completo (incluyendo @lid si aplica)
+        telefono = remote_jid
 
-        # Extraer texto del mensaje (puede venir en distintos campos)
         texto = (
             message.get("conversation")
             or (message.get("extendedTextMessage", {}) or {}).get("text")
             or ""
         )
 
-        # Si no es texto (imagen, audio, etc.), ignorar
         if not texto:
             return mensajes
 
@@ -68,22 +73,29 @@ class ProveedorEvolution(ProveedorWhatsApp):
         return mensajes
 
     async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
-        """Envia mensaje via Evolution API."""
+        """Envia mensaje via Evolution API v1."""
         if not self.api_key:
             logger.warning("EVOLUTION_API_KEY no configurada — mensaje no enviado")
             return False
 
-        url = f"{self.api_url}/message/sendText/{self.instance}"
         headers = {
             "apikey": self.api_key,
             "Content-Type": "application/json",
         }
-        # Usar el JID tal como viene (puede ser @lid, @s.whatsapp.net, etc)
-        # Si no tiene @, agregar @s.whatsapp.net
+
+        # Intentar primero con el JID original (funciona con @s.whatsapp.net)
         numero = telefono if "@" in telefono else f"{telefono}@s.whatsapp.net"
+
+        # Si es @lid, intentar convertir a @s.whatsapp.net buscando el contacto
+        if "@lid" in numero:
+            numero_real = await self._buscar_numero_real(telefono, headers)
+            if numero_real:
+                numero = numero_real
+
+        url = f"{self.api_url}/message/sendText/{self.instance}"
         payload = {
             "number": numero,
-            "text": mensaje,
+            "textMessage": {"text": mensaje},
         }
 
         try:
@@ -96,3 +108,22 @@ class ProveedorEvolution(ProveedorWhatsApp):
         except Exception as e:
             logger.error(f"Error enviando mensaje via Evolution API: {e}")
             return False
+
+    async def _buscar_numero_real(self, jid_lid: str, headers: dict) -> str | None:
+        """Intenta encontrar el numero @s.whatsapp.net a partir de un JID @lid."""
+        try:
+            numero_raw = jid_lid.replace("@lid", "")
+            url = f"{self.api_url}/contact/find/{self.instance}"
+            params = f"?contactId={numero_raw}@lid"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.get(url + params, headers=headers)
+                if r.status_code == 200:
+                    data = r.json()
+                    # Buscar jid o remoteJid en los resultados
+                    if isinstance(data, list) and data:
+                        jid = data[0].get("remoteJid") or data[0].get("id") or ""
+                        if "@s.whatsapp.net" in jid:
+                            return jid
+        except Exception as e:
+            logger.debug(f"No se pudo resolver @lid: {e}")
+        return None
