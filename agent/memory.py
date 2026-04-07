@@ -39,6 +39,17 @@ class Mensaje(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ContactoConocido(Base):
+    """Mapeo de JIDs @lid a numeros reales de WhatsApp."""
+    __tablename__ = "contactos_conocidos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lid_jid: Mapped[str] = mapped_column(String(100), index=True, unique=True)
+    numero: Mapped[str] = mapped_column(String(50))
+    nombre: Mapped[str] = mapped_column(String(200), default="")
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 async def inicializar_db():
     """Crea las tablas si no existen."""
     async with engine.begin() as conn:
@@ -88,3 +99,46 @@ async def limpiar_historial(telefono: str):
         for msg in mensajes:
             await session.delete(msg)
         await session.commit()
+
+
+# ── Contactos conocidos (@lid → numero real) ──
+
+async def guardar_contacto(lid_jid: str, numero: str, nombre: str = ""):
+    """Guarda o actualiza el mapeo @lid → numero real."""
+    async with async_session() as session:
+        query = select(ContactoConocido).where(ContactoConocido.lid_jid == lid_jid)
+        result = await session.execute(query)
+        contacto = result.scalar_one_or_none()
+        if contacto:
+            contacto.numero = numero
+            contacto.nombre = nombre or contacto.nombre
+            contacto.timestamp = datetime.utcnow()
+        else:
+            contacto = ContactoConocido(
+                lid_jid=lid_jid,
+                numero=numero,
+                nombre=nombre,
+                timestamp=datetime.utcnow()
+            )
+            session.add(contacto)
+        await session.commit()
+
+
+async def buscar_por_lid(lid_jid: str) -> str | None:
+    """Busca el numero real de un contacto por su JID @lid."""
+    async with async_session() as session:
+        query = select(ContactoConocido).where(ContactoConocido.lid_jid == lid_jid)
+        result = await session.execute(query)
+        contacto = result.scalar_one_or_none()
+        if contacto:
+            return contacto.numero
+        return None
+
+
+async def obtener_todos_contactos() -> dict[str, str]:
+    """Retorna todos los mapeos @lid → numero como diccionario."""
+    async with async_session() as session:
+        query = select(ContactoConocido)
+        result = await session.execute(query)
+        contactos = result.scalars().all()
+        return {c.lid_jid: c.numero for c in contactos}

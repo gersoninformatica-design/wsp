@@ -39,9 +39,15 @@ _ultimo_qr: dict = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Inicializa la base de datos al arrancar el servidor."""
+    """Inicializa la base de datos y carga contactos al arrancar."""
     await inicializar_db()
     logger.info("Base de datos inicializada")
+    # Seed: contactos @lid conocidos (Naxito)
+    from agent.memory import guardar_contacto
+    await guardar_contacto("63244114890831@lid", "56936150444", "Naxito")
+    # Cargar cache de contactos @lid si el proveedor lo soporta
+    if hasattr(proveedor, 'cargar_contactos'):
+        await proveedor.cargar_contactos()
     logger.info(f"Servidor Elara corriendo en puerto {PORT}")
     logger.info(f"Proveedor de WhatsApp: {proveedor.__class__.__name__}")
     yield
