@@ -20,6 +20,12 @@ logger = logging.getLogger("elara")
 class ProveedorEvolution(ProveedorWhatsApp):
     """Proveedor de WhatsApp usando Evolution API."""
 
+    # Mapeo manual de JIDs @lid a numeros reales
+    # WhatsApp usa @lid para contactos con privacidad activada
+    LID_MAP = {
+        "63244114890831@lid": "56936150444",
+    }
+
     def __init__(self):
         self.api_url = os.getenv("EVOLUTION_API_URL", "http://localhost:8080")
         self.api_key = os.getenv("EVOLUTION_API_KEY", "")
@@ -82,13 +88,19 @@ class ProveedorEvolution(ProveedorWhatsApp):
         # Resolver numero: @lid necesita buscar el numero real
         numero = telefono
         if "@lid" in telefono:
-            numero_real = await self._buscar_numero_real(telefono)
-            if numero_real:
-                numero = numero_real
-                logger.info(f"@lid resuelto: {telefono} -> {numero}")
+            # Primero revisar mapeo manual
+            if telefono in self.LID_MAP:
+                numero = self.LID_MAP[telefono]
+                logger.info(f"@lid mapeado: {telefono} -> {numero}")
             else:
-                logger.warning(f"No se pudo resolver @lid: {telefono}, intentando sin sufijo")
-                numero = telefono.split("@")[0]
+                # Intentar resolver automaticamente
+                numero_real = await self._buscar_numero_real(telefono)
+                if numero_real:
+                    numero = numero_real
+                    logger.info(f"@lid resuelto: {telefono} -> {numero}")
+                else:
+                    logger.warning(f"No se pudo resolver @lid: {telefono}, intentando sin sufijo")
+                    numero = telefono.split("@")[0]
         elif "@" in telefono:
             # Tiene sufijo (@s.whatsapp.net), quitar para sendText
             numero = telefono.split("@")[0]
