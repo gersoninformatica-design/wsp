@@ -38,6 +38,22 @@ services:
       - redis
     restart: unless-stopped
 
+  # PostgreSQL — Base de datos para Evolution v2
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=evolution
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=elara_db_2026
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Redis — Cache para Evolution v2
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
   # Elara — Secretaria Virtual del Sr. Gerson
   elara:
     build: .
@@ -52,3 +68,4 @@ services:
 
 volumes:
   evolution_data:
+  postgres_data:
