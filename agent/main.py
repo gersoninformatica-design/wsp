@@ -42,15 +42,72 @@ async def lifespan(app: FastAPI):
     """Inicializa la base de datos y carga contactos al arrancar."""
     await inicializar_db()
     logger.info("Base de datos inicializada")
-    # Seed: contactos @lid conocidos (Naxito)
+    # Seed: contactos @lid conocidos
     from agent.memory import guardar_contacto
     await guardar_contacto("63244114890831@lid", "56936150444", "Naxito")
+    await guardar_contacto("188166946484295@lid", "56997121210", "Mamá")
     # Cargar cache de contactos @lid si el proveedor lo soporta
     if hasattr(proveedor, 'cargar_contactos'):
         await proveedor.cargar_contactos()
     logger.info(f"Servidor Elara corriendo en puerto {PORT}")
     logger.info(f"Proveedor de WhatsApp: {proveedor.__class__.__name__}")
     yield
+
+
+async def _aprender_contactos(body: dict):
+    """Extrae mapeos @lid → numero de eventos contacts.upsert/update de Evolution."""
+    import json as _json
+    from agent.memory import guardar_contacto
+
+    data = body.get("data", [])
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, list):
+        return
+
+    for contacto in data:
+        if not isinstance(contacto, dict):
+            continue
+
+        # Buscar el JID @lid y el numero real en los campos disponibles
+        lid = ""
+        numero = ""
+        nombre = contacto.get("pushName") or contacto.get("name") or contacto.get("notify") or ""
+
+        cid = contacto.get("id", "")
+        lid_field = contacto.get("lid", "")
+
+        # Caso 1: id es @s.whatsapp.net y lid tiene el @lid
+        if "@s.whatsapp.net" in cid and lid_field and "@lid" in str(lid_field):
+            numero = cid.split("@")[0]
+            lid = str(lid_field) if "@lid" in str(lid_field) else ""
+
+        # Caso 2: id es @lid y hay un campo number
+        elif "@lid" in cid:
+            lid = cid
+            num = contacto.get("number", "")
+            if num and str(num).isdigit() and len(str(num)) > 8:
+                numero = str(num)
+
+        # Caso 3: buscar en otros campos
+        if not numero:
+            for campo in ("number", "jid", "remoteJid", "owner"):
+                val = str(contacto.get(campo, ""))
+                if "@s.whatsapp.net" in val:
+                    numero = val.split("@")[0]
+                    break
+                if val.isdigit() and len(val) > 8:
+                    numero = val
+                    break
+
+        if lid and numero:
+            await guardar_contacto(lid, numero, nombre)
+            if hasattr(proveedor, '_lid_cache'):
+                proveedor._lid_cache[lid] = numero
+            logger.info(f"@lid auto-aprendido: {lid} -> {numero} ({nombre})")
+        elif lid or "@lid" in str(contacto):
+            # Log para investigar formatos desconocidos
+            logger.info(f"Contacto con @lid sin resolver: {_json.dumps(contacto)[:300]}")
 
 
 app = FastAPI(
@@ -107,6 +164,11 @@ async def webhook_handler(request: Request):
             _ultimo_qr["base64"] = b64
             _ultimo_qr["timestamp"] = _time.time()
             logger.info("QR recibido via webhook")
+            return {"status": "ok"}
+
+        # Auto-aprender mapeos @lid desde eventos de contactos
+        if evento in ("contacts.upsert", "contacts.update"):
+            await _aprender_contactos(body_json)
             return {"status": "ok"}
 
         mensajes = await proveedor.parsear_webhook_body(body_json)

@@ -255,7 +255,7 @@ class ProveedorEvolution(ProveedorWhatsApp):
                 r = await client.post(url, json={"where": {"id": jid_lid}}, headers=headers)
                 if r.status_code == 200:
                     data = r.json()
-                    logger.debug(f"findContacts respuesta: {json.dumps(data)[:300]}")
+                    logger.info(f"findContacts respuesta para {jid_lid}: {json.dumps(data)[:500]}")
                     if isinstance(data, list) and data:
                         for contacto in data:
                             # Buscar cualquier campo con numero real
