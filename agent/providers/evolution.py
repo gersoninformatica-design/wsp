@@ -9,6 +9,7 @@ Resolucion automatica de JIDs @lid (contactos con privacidad activada).
 
 import os
 import json
+import base64
 import logging
 import httpx
 from fastapi import Request
@@ -65,13 +66,13 @@ class ProveedorEvolution(ProveedorWhatsApp):
     async def parsear_webhook(self, request: Request) -> list[MensajeEntrante]:
         """Parsea el payload de Evolution API (evento MESSAGES_UPSERT)."""
         body = await request.json()
-        return self._parsear_body(body)
+        return await self._parsear_body(body)
 
     async def parsear_webhook_body(self, body: dict) -> list[MensajeEntrante]:
         """Parsea el body ya deserializado."""
-        return self._parsear_body(body)
+        return await self._parsear_body(body)
 
-    def _parsear_body(self, body: dict) -> list[MensajeEntrante]:
+    async def _parsear_body(self, body: dict) -> list[MensajeEntrante]:
         mensajes = []
 
         evento = body.get("event")
@@ -97,6 +98,21 @@ class ProveedorEvolution(ProveedorWhatsApp):
             or ""
         )
 
+        # Manejar audios y notas de voz
+        if not texto and (message.get("audioMessage") or message.get("pttMessage")):
+            audio_msg = message.get("audioMessage") or message.get("pttMessage")
+            mimetype = (audio_msg.get("mimetype") or "audio/ogg").split(";")[0].strip()
+            media = await self._descargar_audio(key)
+            if media:
+                from agent.transcriber import transcribir_audio
+                texto = await transcribir_audio(media, mimetype)
+                if texto:
+                    texto = f"[Audio transcrito]: {texto}"
+                else:
+                    texto = "[El contacto envio un audio pero no se pudo transcribir]"
+            else:
+                texto = "[El contacto envio un audio pero no se pudo descargar]"
+
         if not texto:
             return mensajes
 
@@ -109,6 +125,40 @@ class ProveedorEvolution(ProveedorWhatsApp):
         ))
 
         return mensajes
+
+    async def _descargar_audio(self, key: dict) -> bytes | None:
+        """Descarga y decodifica audio via Evolution API."""
+        headers = {
+            "apikey": self.api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "message": {
+                "key": {
+                    "remoteJid": key.get("remoteJid", ""),
+                    "fromMe": key.get("fromMe", False),
+                    "id": key.get("id", ""),
+                }
+            },
+            "convertToMp4": False,
+        }
+
+        try:
+            url = f"{self.api_url}/chat/getBase64FromMediaMessage/{self.instance}"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(url, json=payload, headers=headers)
+                if r.status_code == 200:
+                    data = r.json()
+                    b64 = data.get("base64", "")
+                    if b64:
+                        audio_bytes = base64.b64decode(b64)
+                        logger.info(f"Audio descargado: {len(audio_bytes)} bytes")
+                        return audio_bytes
+                logger.error(f"Error descargando audio: {r.status_code} — {r.text[:200]}")
+                return None
+        except Exception as e:
+            logger.error(f"Error al descargar audio de Evolution: {e}")
+            return None
 
     async def enviar_mensaje(self, telefono: str, mensaje: str) -> bool:
         """Envia mensaje via Evolution API v1 con resolucion automatica de @lid."""
