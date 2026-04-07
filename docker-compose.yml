@@ -9,8 +9,7 @@ services:
       - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-elara-secret-key}
       - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
-      - CONFIG_SESSION_PHONE_VERSION=2.2413.51
-      - CONFIG_SESSION_PHONE_CLIENT=Elara
+      - CONFIG_SESSION_PHONE_CLIENT=Chrome
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:elara_db_2026@postgres:5432/evolution
