@@ -55,7 +55,18 @@ async def lifespan(app: FastAPI):
 
 
 async def _aprender_contactos(body: dict):
-    """Extrae mapeos @lid → numero de eventos contacts.upsert/update de Evolution."""
+    """Extrae mapeos @lid → numero de eventos contacts.upsert/update de Evolution.
+
+    Evolution v1.8.7 envia el payload asi:
+    {
+      "event": "contacts.update",
+      "data": {"id": "281191609577663@lid", "pushName": "Elit@", ...},
+      "sender": "56998965231@s.whatsapp.net"  ← numero real del DUEÑO
+    }
+    NOTA: 'sender' es el numero de la instancia (Gerson), NO del contacto.
+    El numero real del contacto puede estar en data.number, data.lid, o
+    en otros campos. Si data.id es @lid, intentamos todos los campos.
+    """
     import json as _json
     from agent.memory import guardar_contacto
 
@@ -69,7 +80,6 @@ async def _aprender_contactos(body: dict):
         if not isinstance(contacto, dict):
             continue
 
-        # Buscar el JID @lid y el numero real en los campos disponibles
         lid = ""
         numero = ""
         nombre = contacto.get("pushName") or contacto.get("name") or contacto.get("notify") or ""
@@ -80,18 +90,13 @@ async def _aprender_contactos(body: dict):
         # Caso 1: id es @s.whatsapp.net y lid tiene el @lid
         if "@s.whatsapp.net" in cid and lid_field and "@lid" in str(lid_field):
             numero = cid.split("@")[0]
-            lid = str(lid_field) if "@lid" in str(lid_field) else ""
+            lid = str(lid_field)
 
-        # Caso 2: id es @lid y hay un campo number
+        # Caso 2: id es @lid
         elif "@lid" in cid:
             lid = cid
-            num = contacto.get("number", "")
-            if num and str(num).isdigit() and len(str(num)) > 8:
-                numero = str(num)
-
-        # Caso 3: buscar en otros campos
-        if not numero:
-            for campo in ("number", "jid", "remoteJid", "owner"):
+            # Buscar numero en cualquier campo disponible
+            for campo in ("number", "jid", "remoteJid"):
                 val = str(contacto.get(campo, ""))
                 if "@s.whatsapp.net" in val:
                     numero = val.split("@")[0]
@@ -105,9 +110,9 @@ async def _aprender_contactos(body: dict):
             if hasattr(proveedor, '_lid_cache'):
                 proveedor._lid_cache[lid] = numero
             logger.info(f"@lid auto-aprendido: {lid} -> {numero} ({nombre})")
-        elif lid or "@lid" in str(contacto):
-            # Log para investigar formatos desconocidos
-            logger.info(f"Contacto con @lid sin resolver: {_json.dumps(contacto)[:300]}")
+        elif lid:
+            # No pudimos resolver — loguear TODO el body para investigar
+            logger.info(f"@lid sin numero en contacts event: {_json.dumps(body, default=str)[:500]}")
 
 
 app = FastAPI(
