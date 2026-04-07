@@ -147,7 +147,7 @@ class ProveedorEvolution(ProveedorWhatsApp):
             url = f"{self.api_url}/chat/getBase64FromMediaMessage/{self.instance}"
             async with httpx.AsyncClient(timeout=30.0) as client:
                 r = await client.post(url, json=payload, headers=headers)
-                if r.status_code == 200:
+                if r.status_code in (200, 201):
                     data = r.json()
                     b64 = data.get("base64", "")
                     if b64:
