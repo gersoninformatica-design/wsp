@@ -8,6 +8,7 @@ Soporta JIDs @s.whatsapp.net y @lid (numeros con privacidad).
 """
 
 import os
+import json
 import logging
 import httpx
 from fastapi import Request
@@ -78,19 +79,19 @@ class ProveedorEvolution(ProveedorWhatsApp):
             logger.warning("EVOLUTION_API_KEY no configurada — mensaje no enviado")
             return False
 
-        headers = {
-            "apikey": self.api_key,
-            "Content-Type": "application/json",
-        }
-
-        # Intentar primero con el JID original (funciona con @s.whatsapp.net)
-        numero = telefono if "@" in telefono else f"{telefono}@s.whatsapp.net"
-
-        # Si es @lid, intentar convertir a @s.whatsapp.net buscando el contacto
-        if "@lid" in numero:
-            numero_real = await self._buscar_numero_real(telefono, headers)
+        # Resolver numero: @lid necesita buscar el numero real
+        numero = telefono
+        if "@lid" in telefono:
+            numero_real = await self._buscar_numero_real(telefono)
             if numero_real:
                 numero = numero_real
+                logger.info(f"@lid resuelto: {telefono} -> {numero}")
+            else:
+                logger.warning(f"No se pudo resolver @lid: {telefono}, intentando sin sufijo")
+                numero = telefono.split("@")[0]
+        elif "@" in telefono:
+            # Tiene sufijo (@s.whatsapp.net), quitar para sendText
+            numero = telefono.split("@")[0]
 
         url = f"{self.api_url}/message/sendText/{self.instance}"
         payload = {
@@ -98,32 +99,58 @@ class ProveedorEvolution(ProveedorWhatsApp):
             "textMessage": {"text": mensaje},
         }
 
+        # Serializar JSON explicitamente para evitar problemas con httpx
+        body = json.dumps(payload, ensure_ascii=False)
+        headers = {
+            "apikey": self.api_key,
+            "Content-Type": "application/json",
+        }
+
+        logger.debug(f"Enviando a {url} | number={numero} | body={body[:200]}")
+
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                r = await client.post(url, json=payload, headers=headers)
+                r = await client.post(url, content=body.encode("utf-8"), headers=headers)
                 if r.status_code not in (200, 201):
                     logger.error(f"Error Evolution API: {r.status_code} — {r.text}")
                     return False
+                logger.info(f"Mensaje enviado a {numero}")
                 return True
         except Exception as e:
             logger.error(f"Error enviando mensaje via Evolution API: {e}")
             return False
 
-    async def _buscar_numero_real(self, jid_lid: str, headers: dict) -> str | None:
+    async def _buscar_numero_real(self, jid_lid: str) -> str | None:
         """Intenta encontrar el numero @s.whatsapp.net a partir de un JID @lid."""
+        headers = {"apikey": self.api_key}
         try:
-            numero_raw = jid_lid.replace("@lid", "")
-            url = f"{self.api_url}/contact/find/{self.instance}"
-            params = f"?contactId={numero_raw}@lid"
+            # Intentar via contactos almacenados
+            url = f"{self.api_url}/chat/findContacts/{self.instance}"
             async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.get(url + params, headers=headers)
+                r = await client.post(url, json={"where": {"id": jid_lid}}, headers=headers)
                 if r.status_code == 200:
                     data = r.json()
-                    # Buscar jid o remoteJid en los resultados
                     if isinstance(data, list) and data:
-                        jid = data[0].get("remoteJid") or data[0].get("id") or ""
-                        if "@s.whatsapp.net" in jid:
-                            return jid
+                        for contacto in data:
+                            jid = contacto.get("id") or contacto.get("remoteJid") or ""
+                            if "@s.whatsapp.net" in jid:
+                                return jid.split("@")[0]
         except Exception as e:
-            logger.debug(f"No se pudo resolver @lid: {e}")
+            logger.debug(f"findContacts fallo: {e}")
+
+        try:
+            # Fallback: buscar en chats recientes
+            url = f"{self.api_url}/chat/findChats/{self.instance}"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(url, json={"where": {"id": jid_lid}}, headers=headers)
+                if r.status_code == 200:
+                    data = r.json()
+                    if isinstance(data, list) and data:
+                        for chat in data:
+                            jid = chat.get("id") or chat.get("remoteJid") or ""
+                            if "@s.whatsapp.net" in jid:
+                                return jid.split("@")[0]
+        except Exception as e:
+            logger.debug(f"findChats fallo: {e}")
+
         return None
