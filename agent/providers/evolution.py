@@ -189,15 +189,30 @@ class ProveedorEvolution(ProveedorWhatsApp):
                     logger.info(f"Mensaje enviado a {numero}")
                     return True
 
-                # Si fallo y era @lid, intentar con el JID completo como fallback
-                if "@lid" in telefono and numero != telefono:
-                    logger.warning(f"Fallo con {numero}, intentando JID completo: {telefono}")
-                    payload["number"] = telefono
-                    body2 = json.dumps(payload, ensure_ascii=False)
-                    r2 = await client.post(url, content=body2.encode("utf-8"), headers=headers)
-                    if r2.status_code in (200, 201):
-                        logger.info(f"Mensaje enviado con JID @lid directo: {telefono}")
+                # Si fallo y era @lid, intentar alternativas
+                if "@lid" in telefono:
+                    # Intento 2: number con @lid completo
+                    if numero != telefono:
+                        logger.warning(f"Fallo con {numero}, intentando @lid en number: {telefono}")
+                        payload["number"] = telefono
+                        body2 = json.dumps(payload, ensure_ascii=False)
+                        r2 = await client.post(url, content=body2.encode("utf-8"), headers=headers)
+                        if r2.status_code in (200, 201):
+                            logger.info(f"Mensaje enviado con @lid en number: {telefono}")
+                            return True
+
+                    # Intento 3: chatId salta validacion isOnWhatsApp
+                    logger.warning(f"Intentando chatId para @lid: {telefono}")
+                    payload_cid = {
+                        "chatId": telefono,
+                        "textMessage": {"text": mensaje},
+                    }
+                    body3 = json.dumps(payload_cid, ensure_ascii=False)
+                    r3 = await client.post(url, content=body3.encode("utf-8"), headers=headers)
+                    if r3.status_code in (200, 201):
+                        logger.info(f"Mensaje enviado con chatId @lid: {telefono}")
                         return True
+                    logger.error(f"chatId tambien fallo: {r3.status_code} — {r3.text[:200]}")
 
                 logger.error(f"Error Evolution API: {r.status_code} — {r.text}")
                 return False

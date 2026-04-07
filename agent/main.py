@@ -155,8 +155,10 @@ async def webhook_handler(request: Request):
         except Exception:
             pass
 
-        # Capturar evento QRCODE_UPDATED antes de parsear mensajes
+        # Log de todos los eventos webhook para diagnostico
         evento = body_json.get("event", "")
+        if evento and evento != "messages.upsert":
+            logger.info(f"Webhook evento: {evento}")
         if evento in ("qrcode.updated", "QRCODE_UPDATED"):
             qr_data = body_json.get("data", {})
             qr_obj = qr_data.get("qrcode", {}) if isinstance(qr_data.get("qrcode"), dict) else {}
